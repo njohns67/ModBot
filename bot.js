@@ -21,7 +21,8 @@ const rules = `**1.** Don't talk about fight club\n
              **4.** Lucky and Alec, please keep your stupid arguments to a minimum\n
              **5.** Keep all topics to their appropriate channels\n
              **6.** No politics\n
-             **7.** That's it. No one really cares what happens in here\n\n\n
+             **7.** No spam\n
+             **8.** That's it. No one really cares what happens in here\n\n\n
              There's a 10% chance that you get kicked by the bot if you swear. Good luck ;)`
 
 const commands = `**!rules** - Displays the server rules\n
