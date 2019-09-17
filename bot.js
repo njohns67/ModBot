@@ -115,7 +115,7 @@ bot.on("message", message => {
     if(!message.author.bot){
         //checkDad(message); Obsolete
         var tempMember = members.find(member => member.member.id == message.member.id);
-        if(!tempMember.checkSpam(message)){
+        if(tempMember.checkSpam(message)){
             return;
         }
         checkDick(message);
