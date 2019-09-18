@@ -5,6 +5,8 @@ var fs = require("fs");
 var XMLHttpRequest = require("xmlhttprequest").XMLHttpRequest;
 var FormData = require("form-data");
 var request = require("request");
+const { Transform } = require('stream')
+var net = require("net")
 
 const music = "619747657640050693";
 const dev = "622113474004385823";
@@ -41,6 +43,20 @@ const curseWords = ["fuck", "shit", "damn", "dam", "cunt",
 
 var members = new Array();
 var numMentioned = 0;
+var first = true;
+
+async function getTranscript(){
+    console.log("Initializing server")
+    var server = net.createServer(function(c) {
+        console.log("Server created")
+        c.pipe(c)
+    })
+    server.on("data", function(data){
+        console.log("Data is ${data}")
+    })
+    server.on("listening", () => console.log("Listening"))
+    server.listen(3000)
+}
 
 class Member { 
     constructor(_member){
@@ -81,10 +97,33 @@ class Member {
     }
 }
 
+
+function convertBufferTo1Channel(buffer) {
+    const convertedBuffer = Buffer.alloc(buffer.length / 2)
+  
+    for (let i = 0; i < convertedBuffer.length / 2; i++) {
+      const uint16 = buffer.readUInt16LE(i * 4)
+      convertedBuffer.writeUInt16LE(uint16, i * 2)
+    }
+  
+    return convertedBuffer
+  }
+  
+  class ConvertTo1ChannelStream extends Transform {
+    constructor(source, options) {
+      super(options)
+    }
+  
+    _transform(data, encoding, next) {
+      next(null, convertBufferTo1Channel(data))
+    }
+  }
+
 // Initialize Discord Bot
 var bot = new Discord.Client();
 bot.login(auth["token"]);
 
+var voicecon
 bot.on("ready", function (evt) {
     console.log("Logged in as: " + bot.username + " - (" + bot.id + ")");
     var guild = bot.guilds.get(server);
@@ -93,8 +132,71 @@ bot.on("ready", function (evt) {
         members.push(new Member(member));
         console.log(member.user.username);
     });
+    
 });
 
+var data = ""
+var mainSocket = net.createConnection("3000", "10.0.0.161")
+mainSocket.on("data", function(d){
+    data = d.toString()
+    console.log("Data is " + data)
+    if(data == "Dong"){
+        voicecon.playFile("dong.wav")
+    }
+    if(data.split(" ")[0] == "play"){
+        bot.channels.get(music).send("-play" + data.substring(4, data.length))
+    }
+})
+mainSocket.on("end", ()=> console.log("ending server"))
+
+bot.on("voiceStateUpdate",  async (oldMember, newMember) => {
+    if(newMember.user.bot || bot.voiceConnections.size > 0){
+        return
+    }
+    console.log('Presence:', newMember.user.username)
+
+    if (!newMember.presence || !newMember.voiceChannel) {
+      return
+    }
+
+    newMember.voiceChannel.join().catch(console.error).then(async function(connection) {
+        voicecon = connection;
+        console.log("Connected");
+        if(first){
+            await connection.playFile("intro.mp3")
+            //getTranscript()
+            first = false;
+        }
+        connection.on('speaking', (user, speaking) => {
+            if (!speaking){
+                console.log("returning")
+                return
+            }
+            console.log("listening")
+ 
+            const receiver = connection.createReceiver()
+            const audioStream = receiver.createPCMStream(user)
+            const convertTo1ChannelStream = new ConvertTo1ChannelStream()
+            convertTo1ChannelStream.on("end", () => console.log("Ending"))
+            const requestConfig = {
+                encoding: 'LINEAR16',
+                sampleRateHertz: 48000,
+                languageCode: 'en-US'
+            }
+            var socket = net.createConnection("3000", "10.0.0.161")
+            socket.on("data", function(data){
+                console.log("Data is " + data)
+            })
+            audioStream.pipe(convertTo1ChannelStream).pipe(socket)
+            audioStream.on('end',  () => {
+                console.log('audioStream end')
+                socket.destroy()
+                receiver.destroy()
+                convertBufferTo1Channel.destroy()
+            })
+        })
+    })
+})
 
 bot.on("guildMemberAdd", member => {
     const channel = member.guild.channels.find(ch => ch.name === 'general');
@@ -134,15 +236,15 @@ bot.on("message", message => {
             numMentioned--;
         }   
         if(message.channel.id == general){ // || message.channel.id == dev){
-            if(message.content.substring(0, 1) != '+' && message.content.substring(0, 1) != "!"){
+            if(message.content.substring(0, 1) != '-' && message.content.substring(0, 1) != "!"){
                 checkEmotion(message);
             }
             checkCurse(message);
         }
-        if (message.content.substring(0, 1) == '+'){
+        if (message.content.substring(0, 1) == '-'){
             checkMusic(message);
         }
-        if(message.channel.id == music && message.content.substring(0, 1) != '+'){
+        if(message.channel.id == music && message.content.substring(0, 1) != '-'){
             message.channel.send("Please keep **#music** reserved for music bot commands only");
             message.delete();
         }
@@ -157,7 +259,7 @@ function checkMusic(message){
     channelID = message.channelID;
     // Our bot needs to know if it will execute a command
     // It will listen for messages that will start with `!`
-    if (message.content.substring(0, 1) == '+' &&  message.channel.id != music){
+    if (message.content.substring(0, 1) == '-' &&  message.channel.id != music){
         var args = message.content.substring(1).split(" ");
         var cmd = args[0];
         args = args.splice(1);
